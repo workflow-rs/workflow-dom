@@ -1,4 +1,4 @@
-# WORKFLOW-DOM
+## WORKFLOW-DOM
 
 Part of the [WORKFLOW-RS](https://github.com/workflow-rs) application framework.
 
@@ -8,7 +8,7 @@ Browser DOM manipulation utilities
 
 Platforms supported: WASM (browser)
 
-# Features:
+## Features
 
 * Dynamic (runtime) injection of JsvaScript modules and CSS data into Browser DOM
 * Optionally supplied callback gets invoked upon the successful load.
