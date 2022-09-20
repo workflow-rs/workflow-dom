@@ -2,6 +2,14 @@
 name = "workflow-dom"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/workflow-rs/workflow-dom"
+keywords = ["wasm","framework","html","dom","inject","script","css","javascript"]
+categories = []
+exclude = ["/.*", "/test"]
+description = """
+DOM injection utilities for run-time injection of JavaScript and CSS
+"""
 
 [lib]
 crate-type = ["cdylib","lib"]
@@ -13,8 +21,6 @@ wasm-bindgen = "0.2.79"
 js-sys = "0.3.56"
 regex = "1.5.5"
 
-# thiserror = "1.0"
-
 [dependencies.web-sys]
 version = "0.3.56"
 features = [
@@ -24,33 +30,7 @@ features = [
     'Url',
     'Blob',
     'CustomEvent',
-
-
-    # 'console',
-    # 'Document',
-    # 'Element',
-    # 'HtmlElement',
-    # 'HtmlLinkElement',
-    # 'HtmlImageElement',
-    # 'HtmlInputElement',
-    # 'HtmlHrElement',
     'Node',
     'NodeList',
-    # 'Window',
-    # 'InputEvent',
-    # 'MouseEvent',
-    # 'ErrorEvent',
-    # 'KeyEvent',
-    # 'CustomEvent',
     'HtmlCollection',
-    # 'DomTokenList',
-    # 'SvgPathElement',
-    # 'SvgPoint',
-    # 'DomRect',
-    # 'TransitionEvent',
-    # 'MutationObserver',
-    # 'MutationObserverInit',
-    # 'MutationRecord',
-
-
 ]
