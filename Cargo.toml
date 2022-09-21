@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0/MIT"
 repository = "https://github.com/workflow-rs/workflow-dom"
-keywords = ["wasm","framework","html","dom","inject","script","css","javascript"]
-categories = []
+keywords = ["wasm","dom","inject","script","css"]
+categories = ["web-programming::http-client","wasm"]
 exclude = ["/.*", "/test"]
 description = """
 DOM injection utilities for run-time injection of JavaScript and CSS
@@ -15,8 +15,10 @@ DOM injection utilities for run-time injection of JavaScript and CSS
 crate-type = ["cdylib","lib"]
 
 [dependencies]
-workflow-wasm = { path = "../workflow-wasm" }
-workflow-log = { path = "../workflow-log" }
+workflow-wasm = "0.1.0"
+# workflow-wasm = { path = "../workflow-wasm" }
+workflow-log = "0.1.0"
+# workflow-log = { path = "../workflow-log" }
 wasm-bindgen = "0.2.79"
 js-sys = "0.3.56"
 regex = "1.5.5"
