@@ -6,7 +6,9 @@ Part of the [WORKFLOW-RS](https://github.com/workflow-rs) application framework.
 
 Browser DOM manipulation utilities
 
-Platforms supported: WASM (browser)
+[![Crates.io](https://img.shields.io/crates/l/workflow-dom.svg?maxAge=2592000)](https://crates.io/crates/workflow-dom)
+[![Crates.io](https://img.shields.io/crates/v/workflow-dom.svg?maxAge=2592000)](https://crates.io/crates/workflow-dom)
+![platform](https://img.shields.io/badge/platform-Web%20%28wasm32%29-informational)
 
 ## Features
 
