@@ -15,10 +15,10 @@ DOM injection utilities for run-time injection of JavaScript and CSS
 crate-type = ["cdylib","lib"]
 
 [dependencies]
-workflow-wasm = "0.1.0"
-# workflow-wasm = { path = "../workflow-wasm" }
-workflow-log = "0.1.0"
-# workflow-log = { path = "../workflow-log" }
+workflow-wasm = { path = "../workflow-wasm" }
+workflow-log = { path = "../workflow-log" }
+# workflow-wasm = "0.1.0"
+# workflow-log = "0.1.0"
 wasm-bindgen = "0.2.79"
 js-sys = "0.3.56"
 regex = "1.5.5"
