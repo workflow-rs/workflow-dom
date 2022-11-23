@@ -1,6 +1,7 @@
 use js_sys::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use web_sys::Element;
 use web_sys::{Url,Blob};
 use workflow_log::*;
 use crate::result::Result;
@@ -10,6 +11,7 @@ use crate::utils::*;
 
 pub enum Content<'content> {
     Script(&'content [u8]),
+    Module(&'content [u8]),
     Style(&'content [u8])
 }
 
@@ -24,6 +26,31 @@ pub fn inject_css(css : &str) -> Result<()> {
 
 pub fn inject_blob(name: &str, content: Content) ->  Result<()> {
     inject_blob_with_callback(name, content, None)
+}
+
+pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->Result<()>>>) -> Result<()> {
+    let doc = document();
+    let string = String::from_utf8_lossy(content);
+    let regex = regex::Regex::new(r"//# sourceMappingURL.*$").unwrap();
+    let content = regex.replace(&string, "");
+
+    let args = Array::new_with_length(1);
+    args.set(0, unsafe { Uint8Array::view(content.as_bytes()).into() });
+    let mut options = web_sys::BlobPropertyBag::new();
+    options.type_("application/javascript");
+    let blob = Blob::new_with_u8_array_sequence_and_options(&args, &options)?;
+    let url = Url::create_object_url_with_blob(&blob)?;
+
+    let script = doc.create_element("script")?;
+    if let Some(closure) = load {
+        script.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    script.set_attribute("type",content_type)?;
+    script.set_attribute("src", &url)?;
+    root.append_child(&script)?;
+
+    Ok(())
 }
 
 pub fn inject_blob_with_callback(name : &str, content : Content, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->Result<()>>>) -> Result<()> {
@@ -45,24 +72,10 @@ pub fn inject_blob_with_callback(name : &str, content : Content, load : Option<C
     
     match content {
         Content::Script(content) => {
-
-            let string = String::from_utf8_lossy(content);
-            let regex = regex::Regex::new(r"//# sourceMappingURL.*$").unwrap();
-            let content = regex.replace(&string, "");
-
-            let args = Array::new_with_length(1);
-            args.set(0, unsafe { Uint8Array::view(content.as_bytes()).into() });
-            let blob = Blob::new_with_u8_array_sequence(&args)?;
-            let url = Url::create_object_url_with_blob(&blob)?;
-        
-            let script = doc.create_element("script")?;
-            if let Some(closure) = load {
-                script.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref())?;
-                closure.forget();
-            }
-            script.set_attribute("type","text/javascript")?;
-            script.set_attribute("src", &url)?;
-            root.append_child(&script)?;
+            inject_script(root, content, "text/javascript", load)?;
+        },
+        Content::Module(content) => {
+            inject_script(root, content, "module", load)?;
         },
         Content::Style(content) => {
             let args = Array::new_with_length(1);
