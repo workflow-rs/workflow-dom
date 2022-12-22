@@ -1,20 +1,34 @@
+//!
+//! DOM injection utilities, allowing injection of `script` and `style` 
+//! elements from Rust buffers using [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
+//! objects.
+//! 
+//! This can be used in conjunction with [`include_bytes`] macro to embed 
+//! JavaScript scripts, modules and CSS stylesheets directly within WASM 
+//! binary.
+//! 
+
 use js_sys::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::Element;
 use web_sys::{Url,Blob};
-use workflow_log::*;
 use crate::result::Result;
-// use crate::error::Error;
 use crate::utils::*;
-// use workflow_wasm::listener::Listener;
 
+/// The Content enum specifies the type of the content being injected
 pub enum Content<'content> {
+    /// This data slice represents a JavaScript script 
     Script(&'content [u8]),
+    /// This data slice represents a JavaScript module
     Module(&'content [u8]),
+    /// This data slice represents a CSS stylesheet
     Style(&'content [u8])
 }
 
+/// Inject CSS stylesheed directly into DOM as a 
+/// [`<style>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/style) 
+/// element using [`Element::set_inner_html`]
 pub fn inject_css(css : &str) -> Result<()> {
     let doc = document();
     let head = doc.get_elements_by_tag_name("head").item(0).ok_or("Unable to locate head element")?;
@@ -24,10 +38,16 @@ pub fn inject_css(css : &str) -> Result<()> {
     Ok(())
 }
 
-pub fn inject_blob(name: &str, content: Content) ->  Result<()> {
-    inject_blob_with_callback(name, content, None)
+/// Inject a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
+/// into DOM. The `content` argument carries the data buffer and 
+/// the content type represented by the [`Content`] struct.
+pub fn inject_blob(content: Content) ->  Result<()> {
+    inject_blob_with_callback(content, None)
 }
 
+/// Inject script as a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob) buffer
+/// into DOM. Executes an optional `load` callback when the loading is complete. The load callback
+/// receives [`web_sys::CustomEvent`] struct indicating the load result.
 pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->Result<()>>>) -> Result<()> {
     let doc = document();
     let string = String::from_utf8_lossy(content);
@@ -53,9 +73,10 @@ pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Opti
     Ok(())
 }
 
-pub fn inject_blob_with_callback(name : &str, content : Content, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->Result<()>>>) -> Result<()> {
-
-    log_trace!("loading {}",name);
+/// Inject data buffer contained in the [`Content`] struct as a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
+/// into DOM. Executes an optional `load` callback when the loading is complete. The load callback
+/// receives [`web_sys::CustomEvent`] struct indicating the load result.
+pub fn inject_blob_with_callback(content : Content, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->Result<()>>>) -> Result<()> {
 
     let doc = document();
     let root = {
