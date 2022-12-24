@@ -13,8 +13,9 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::Element;
 use web_sys::{Url,Blob};
-use crate::result::Result;
+use crate::result::*;
 use crate::utils::*;
+use workflow_core::channel::oneshot;
 
 /// The Content enum specifies the type of the content being injected
 pub enum Content<'content> {
@@ -41,14 +42,28 @@ pub fn inject_css(css : &str) -> Result<()> {
 /// Inject a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
 /// into DOM. The `content` argument carries the data buffer and 
 /// the content type represented by the [`Content`] struct.
-pub fn inject_blob(content: Content) ->  Result<()> {
+pub fn inject_blob_nowait(content: Content) ->  Result<()> {
     inject_blob_with_callback(content, None)
+}
+
+/// Inject a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
+/// into DOM. The `content` argument carries the data buffer and 
+/// the content type represented by the [`Content`] struct. This function
+/// returns a future that completes upon injection completion.
+pub async fn inject_blob(content:Content<'_>) -> Result<()> {
+    let (sender, receiver) = oneshot();
+    inject_blob_with_callback(content, Some(Closure::<dyn FnMut(web_sys::CustomEvent)->std::result::Result<(), JsValue>>::new(move|notification|->std::result::Result<(), JsValue>{
+        sender.try_send(notification).expect("inject_blob_with_callback(): unable to send load notification");
+        Ok(())
+    })))?;
+    let _notification = receiver.recv().await?;
+    Ok(())
 }
 
 /// Inject script as a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob) buffer
 /// into DOM. Executes an optional `load` callback when the loading is complete. The load callback
 /// receives [`web_sys::CustomEvent`] struct indicating the load result.
-pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->Result<()>>>) -> Result<()> {
+pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->JsResult<()>>>) -> Result<()> {
     let doc = document();
     let string = String::from_utf8_lossy(content);
     let regex = regex::Regex::new(r"//# sourceMappingURL.*$").unwrap();
@@ -76,7 +91,7 @@ pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Opti
 /// Inject data buffer contained in the [`Content`] struct as a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
 /// into DOM. Executes an optional `load` callback when the loading is complete. The load callback
 /// receives [`web_sys::CustomEvent`] struct indicating the load result.
-pub fn inject_blob_with_callback(content : Content, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->Result<()>>>) -> Result<()> {
+pub fn inject_blob_with_callback(content : Content, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->JsResult<()>>>) -> Result<()> {
 
     let doc = document();
     let root = {
