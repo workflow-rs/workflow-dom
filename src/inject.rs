@@ -103,9 +103,6 @@ pub fn inject_blob_with_callback(content : Content, load : Option<Closure::<dyn 
         }
     };
 
-    let mime = js_sys::Object::new();
-    js_sys::Reflect::set(&mime, &"type".into(), &JsValue::from_str("text/javascript"))?;
-    
     match content {
         Content::Script(content) => {
             inject_script(root, content, "text/javascript", load)?;
