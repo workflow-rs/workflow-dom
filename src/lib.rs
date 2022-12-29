@@ -17,6 +17,7 @@
 //! ```
 
 pub mod inject;
+pub mod loader;
 pub mod utils;
 pub mod error;
 pub mod result;
