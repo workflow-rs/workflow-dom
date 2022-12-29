@@ -8,23 +8,24 @@
 //! binary.
 //! 
 
-use js_sys::*;
-use wasm_bindgen::JsCast;
-use wasm_bindgen::prelude::*;
 use web_sys::Element;
 use web_sys::{Url,Blob};
+use js_sys::{Array,Uint8Array,Function};
 use crate::result::*;
 use crate::utils::*;
 use workflow_core::channel::oneshot;
+use workflow_wasm::callback::*;
+
+pub type CustomEventCallback = Callback<CallbackClosureWithoutResult<web_sys::CustomEvent>>;
 
 /// The Content enum specifies the type of the content being injected
 pub enum Content<'content> {
     /// This data slice represents a JavaScript script 
-    Script(&'content [u8]),
+    Script(Option<&'content str>, &'content [u8]),
     /// This data slice represents a JavaScript module
-    Module(&'content [u8]),
+    Module(Option<&'content str>, &'content [u8]),
     /// This data slice represents a CSS stylesheet
-    Style(&'content [u8])
+    Style(Option<&'content str>, &'content [u8])
 }
 
 /// Inject CSS stylesheed directly into DOM as a 
@@ -43,7 +44,7 @@ pub fn inject_css(css : &str) -> Result<()> {
 /// into DOM. The `content` argument carries the data buffer and 
 /// the content type represented by the [`Content`] struct.
 pub fn inject_blob_nowait(content: Content) ->  Result<()> {
-    inject_blob_with_callback(content, None)
+    inject_blob_with_callback::<CustomEventCallback>(content, None)
 }
 
 /// Inject a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
@@ -52,10 +53,10 @@ pub fn inject_blob_nowait(content: Content) ->  Result<()> {
 /// returns a future that completes upon injection completion.
 pub async fn inject_blob(content:Content<'_>) -> Result<()> {
     let (sender, receiver) = oneshot();
-    inject_blob_with_callback(content, Some(Closure::<dyn FnMut(web_sys::CustomEvent)->std::result::Result<(), JsValue>>::new(move|notification|->std::result::Result<(), JsValue>{
-        sender.try_send(notification).expect("inject_blob_with_callback(): unable to send load notification");
-        Ok(())
-    })))?;
+    let callback = callback!(move |event : web_sys::CustomEvent| {
+        sender.try_send(event).expect("inject_blob_with_callback(): unable to send load notification");
+    });
+    inject_blob_with_callback(content,Some(&callback))?;
     let _notification = receiver.recv().await?;
     Ok(())
 }
@@ -63,7 +64,10 @@ pub async fn inject_blob(content:Content<'_>) -> Result<()> {
 /// Inject script as a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob) buffer
 /// into DOM. Executes an optional `load` callback when the loading is complete. The load callback
 /// receives [`web_sys::CustomEvent`] struct indicating the load result.
-pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->JsResult<()>>>) -> Result<()> {
+// pub fn inject_script(root:Element, id : Option<&str>, content:&[u8], content_type:&str, callback : Option<&CustomEventCallback>) -> Result<()> {
+pub fn inject_script<C>(root:Element, id : Option<&str>, content:&[u8], content_type:&str, callback : Option<&C>) -> Result<()> 
+where C : AsRef<Function>
+{
     let doc = document();
     let string = String::from_utf8_lossy(content);
     let regex = regex::Regex::new(r"//# sourceMappingURL.*$").unwrap();
@@ -77,9 +81,11 @@ pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Opti
     let url = Url::create_object_url_with_blob(&blob)?;
 
     let script = doc.create_element("script")?;
-    if let Some(closure) = load {
-        script.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref())?;
-        closure.forget();
+    if let Some(callback) = callback {
+        script.add_event_listener_with_callback("load", callback.as_ref())?;
+    }
+    if let Some(id) = id {
+        script.set_attribute("id", id)?;
     }
     script.set_attribute("type",content_type)?;
     script.set_attribute("src", &url)?;
@@ -88,10 +94,36 @@ pub fn inject_script(root:Element, content:&[u8], content_type:&str, load : Opti
     Ok(())
 }
 
+pub fn inject_stylesheet<C>(root: Element, id : Option<&str>, content: &[u8], callback: Option<&C>) -> Result<()> 
+where C : AsRef<Function>
+{
+    let args = Array::new_with_length(1);
+    args.set(0, unsafe { Uint8Array::view(content).into() });
+    let blob = Blob::new_with_u8_array_sequence(&args)?;
+    let url = Url::create_object_url_with_blob(&blob)?;
+
+    let style = document().create_element("link")?;
+    if let Some(callback) = callback {
+        style.add_event_listener_with_callback("load", callback.as_ref())?;
+        // closure.forget();
+    }
+    if let Some(id) = id {
+        style.set_attribute("id", id)?;
+    }
+    style.set_attribute("type","text/css")?;
+    style.set_attribute("rel","stylesheet")?;
+    style.set_attribute("href",&url)?;
+    root.append_child(&style)?;
+    Ok(())
+}
+
 /// Inject data buffer contained in the [`Content`] struct as a [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
 /// into DOM. Executes an optional `load` callback when the loading is complete. The load callback
 /// receives [`web_sys::CustomEvent`] struct indicating the load result.
-pub fn inject_blob_with_callback(content : Content, load : Option<Closure::<dyn FnMut(web_sys::CustomEvent)->JsResult<()>>>) -> Result<()> {
+pub fn inject_blob_with_callback<C>(content : Content, callback: Option<&C>) -> Result<()>
+// pub fn inject_blob_with_callback(content : Content, callback : Option<&CustomEventCallback>) -> Result<()> 
+where C : AsRef<Function>
+{
 
     let doc = document();
     let root = {
@@ -104,27 +136,14 @@ pub fn inject_blob_with_callback(content : Content, load : Option<Closure::<dyn 
     };
 
     match content {
-        Content::Script(content) => {
-            inject_script(root, content, "text/javascript", load)?;
+        Content::Script(id, content) => {
+            inject_script(root, id, content, "text/javascript", callback)?;
         },
-        Content::Module(content) => {
-            inject_script(root, content, "module", load)?;
+        Content::Module(id, content) => {
+            inject_script(root, id, content, "module", callback)?;
         },
-        Content::Style(content) => {
-            let args = Array::new_with_length(1);
-            args.set(0, unsafe { Uint8Array::view(content).into() });
-            let blob = Blob::new_with_u8_array_sequence(&args)?;
-            let url = Url::create_object_url_with_blob(&blob)?;
-        
-            let style = doc.create_element("link")?;
-            if let Some(closure) = load {
-                style.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref())?;
-                closure.forget();
-            }
-            style.set_attribute("type","text/css")?;
-            style.set_attribute("rel","stylesheet")?;
-            style.set_attribute("href",&url)?;
-            root.append_child(&style)?;
+        Content::Style(id, content) => {
+            inject_stylesheet(root, id, content, callback)?;
         },
     }
 
