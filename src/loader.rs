@@ -13,8 +13,9 @@ use crate::error::Error;
 use crate::result::Result;
 use workflow_core::time::*;
 
-pub type Id = u32;
+pub type Id = u64;
 pub type ContentMap = HashMap<Id,Arc<Content>>;
+pub type ContentList<'l> = &'l [(Id,Arc<Content>)];
 
 static mut DOCUMENT_ROOT : Option<web_sys::Element> = None;
 
@@ -102,14 +103,6 @@ impl Content {
                 let module = ctx.get(id).ok_or(format!("unable to lookup module `{}`",self.ident))?;
                 let url = module.url().ok_or(format!("[{}] module is not loaded `{}`",self.ident,id))?;
                 match kind {
-                    Reference::Style => {
-                        // TODO: import style into the global document
-                        log_info!("referencing style {}", module.ident)
-                    },
-                    Reference::Script => {
-                        // TODO: import style into the global document
-                        log_info!("TODO: loading script {}", id)
-                    },
                     Reference::Module => {
                         match what {
                             Some(detail) => {
@@ -124,7 +117,8 @@ impl Content {
                         let module = ctx.get(id).ok_or(format!("unable to lookup module `{}`",self.ident))?;
                         let url = module.url().ok_or(format!("[{}] module is not loaded `{}`",self.ident,id))?;
                         exports.push(format!("export {} from \"{}\";", what.unwrap(), url));
-                    }
+                    },
+                    _ => { }
                 }
             }
 
@@ -174,13 +168,9 @@ impl Content {
             }
             Ok(())
         }.boxed()
-
-        // Some(future)
-
-        // Ok(())
     }
 
-    pub async fn load(self : &Arc<Self>, ctx: &Arc<Context>) -> Result<ContentStatus> {
+    pub async fn load(self : Arc<Self>, ctx: &Arc<Context>) -> Result<ContentStatus> {
         ctx.load_content(self).await
     }
 
@@ -190,7 +180,6 @@ impl Content {
         let args = Array::new_with_length(1);
         args.set(0, unsafe { Uint8Array::view(content.as_bytes()).into() });
         let mut options = web_sys::BlobPropertyBag::new();
-        // options.type_("module");
         match self.content_type {
             ContentType::Module | ContentType::Script => {
                 options.type_("application/javascript");
@@ -281,26 +270,44 @@ println!("injecting style `{}`", self.ident);
 
 
 pub struct Context {
-    pub content : Arc<ContentMap>,
+    pub content : Arc<Mutex<ContentMap>>,
     pub lookup_handler : LookupHandler<Id,ContentStatus,Error>,
     pub loaded : AtomicUsize,
 }
 
-impl Context {
-
-    pub fn new(content : ContentMap) -> Context {
+impl Default for Context {
+    fn default() -> Self {
         Context {
-            content : Arc::new(content),
-            lookup_handler: LookupHandler::new(),
+            content : Arc::new(Mutex::new(ContentMap::new())),
+            lookup_handler : LookupHandler::new(),
             loaded : AtomicUsize::new(0),
         }
     }
+}
 
-    pub fn get<'l>(&'l self, id : &Id) -> Option<&'l Arc<Content>> {
-        self.content.get(id)
+impl Context {
+
+    // pub fn new(content : ContentMap) -> Context {
+    //     Context {
+    //         content : Arc::new(Mutex::new(content)),
+    //         lookup_handler: LookupHandler::new(),
+    //         loaded : AtomicUsize::new(0),
+    //     }
+    // }
+
+    pub fn declare(&self, content : ContentList) {
+        self.content.lock().unwrap().extend(content.into_iter().cloned());
+        // let mut map = self.content.lock().unwrap();
+        // for (id, content) in content.iter() {
+        //     map.insert(*id,content.clone());
+        // }
+    }
+    
+    pub fn get(&self, id : &Id) -> Option<Arc<Content>> {
+        self.content.lock().unwrap().get(id).cloned()
     }
 
-    pub async fn load_content(self: &Arc<Self>, content : &Arc<Content>) -> Result<ContentStatus> {
+    pub async fn load_content(self: &Arc<Self>, content : Arc<Content>) -> Result<ContentStatus> {
 
         if content.is_loaded() {
             Ok(ContentStatus::Exists)
@@ -324,6 +331,12 @@ impl Context {
 
         let start = Instant::now();
 
+        // let mut futures = Vec::with_capacity(list.len());
+        // for id in list {
+        //     if let Some(module) = self.get(id) {
+        //         futures.push(module.load(self));
+        //     }            
+        // }
         let futures = list
             .iter()
             .map(|id| {
@@ -355,4 +368,24 @@ impl Context {
 
         Ok(())
     }
+}
+
+static mut CONTEXT: Option<Arc<Context>> = None;
+
+pub fn context() -> Arc<Context> {
+    unsafe {
+        if let Some(context) = CONTEXT.as_ref() {
+            return context.clone();
+        } else {
+            let context = Arc::new(Context::default());
+            CONTEXT = Some(context.clone());
+            return context;
+        }
+    }
+}
+
+pub fn declare(content : ContentList) -> Arc<Context> {
+    let ctx = context();
+    ctx.declare(content);
+    ctx
 }
